@@ -37,34 +37,15 @@ class PlanCategoriesFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         binding.recyclerView.layoutManager = LinearLayoutManager(requireContext())
         lateinit var adapter: ItemAdapter
-        val dragHelper = ItemTouchHelper(object : ItemTouchHelper.SimpleCallback(
-            ItemTouchHelper.UP or ItemTouchHelper.DOWN, 0
-        ) {
-            override fun onMove(
-                recyclerView: RecyclerView,
-                viewHolder: RecyclerView.ViewHolder,
-                target: RecyclerView.ViewHolder
-            ): Boolean {
-                val from = viewHolder.adapterPosition
-                val to = target.adapterPosition
-                val itemFrom = adapter.currentList.getOrNull(from)
-                val itemTo = adapter.currentList.getOrNull(to)
-                if (itemFrom?.isPlaceholder == true || itemTo?.isPlaceholder == true) return false
-                viewModel.reorderCategory(from - 1, to - 1)
-                adapter.moveItem(from, to)
-                return true
-            }
-
-            override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {}
-
-            override fun isLongPressDragEnabled(): Boolean = false
-        })
+        val dragHelper = createPlanDragHelper({ adapter }) { from, to ->
+            viewModel.reorderCategory(from, to)
+        }
 
         adapter = ItemAdapter(
             onAction = { item, action ->
                 val index = adapter.currentList.indexOf(item) - 1
                 when (action) {
-                    ItemAdapter.Action.EDIT -> showEditDialog(index, item.name)
+                    ItemAdapter.Action.EDIT -> showTextEditDialog(item.name) { viewModel.editCategory(index, it) }
                     ItemAdapter.Action.DELETE -> viewModel.deleteCategory(index)
                     else -> {}
                 }
@@ -78,26 +59,13 @@ class PlanCategoriesFragment : Fragment() {
         binding.recyclerView.adapter = adapter
         dragHelper.attachToRecyclerView(binding.recyclerView)
 
-        val gestureDetector = GestureDetectorCompat(requireContext(), object : GestureDetector.SimpleOnGestureListener() {
-            override fun onDoubleTap(e: MotionEvent): Boolean {
-                val child = binding.recyclerView.findChildViewUnder(e.x, e.y)
-                val position = child?.let { binding.recyclerView.getChildAdapterPosition(it) } ?: RecyclerView.NO_POSITION
-                if (position != RecyclerView.NO_POSITION) {
-                    val item = adapter.currentList.getOrNull(position)
-                    if (item?.isHeading == true) {
-                        val index = position - 1
-                        val viewPager = requireActivity().findViewById<ViewPager2>(R.id.viewPager)
-                        viewPager.currentItem = index + 1
-                        return true
-                    }
-                }
-                return super.onDoubleTap(e)
+        binding.recyclerView.setRowDoubleTapListener { id ->
+            val index = viewModel.categories.value?.indexOfFirst { it.id == id } ?: -1
+            val viewPager = requireActivity().findViewById<ViewPager2>(R.id.viewPager)
+            val page = index + 1 // page 0 is the category list
+            if (index >= 0 && page < (viewPager.adapter?.itemCount ?: 0)) {
+                viewPager.currentItem = page
             }
-        })
-
-        binding.recyclerView.setOnTouchListener { _, event ->
-            gestureDetector.onTouchEvent(event)
-            false
         }
 
         binding.btnClearAll.visibility = View.VISIBLE
@@ -114,29 +82,10 @@ class PlanCategoriesFragment : Fragment() {
         viewModel.categories.observe(viewLifecycleOwner) { list ->
             binding.tvHeading.text = getString(R.string.categories_heading)
             binding.tvCount.text = ""
-            val items = mutableListOf<ShoppingItem>()
-            items.add(ShoppingItem(-1, "", isPlaceholder = true))
-            list.forEach { cat ->
-                items.add(ShoppingItem(cat.id, cat.heading, isHeading = true))
-            }
-            items.add(ShoppingItem(-2, "", isPlaceholder = true))
-            adapter.submitList(items)
+            adapter.submitList(
+                list.map { ShoppingItem(it.id, it.heading, isHeading = true) }.withPlaceholders()
+            )
         }
-    }
-
-    private fun showEditDialog(index: Int, current: String) {
-        val input = android.widget.EditText(requireContext()).apply { setText(current) }
-        AlertDialog.Builder(requireContext())
-            .setTitle(getString(R.string.edit))
-            .setView(input)
-            .setPositiveButton(android.R.string.ok) { _, _ ->
-                val text = input.text.toString().trim()
-                if (text.isNotEmpty()) {
-                    viewModel.editCategory(index, text)
-                }
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
     }
 
     override fun onDestroyView() {

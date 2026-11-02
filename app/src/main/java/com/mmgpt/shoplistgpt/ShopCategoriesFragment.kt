@@ -36,27 +36,13 @@ class ShopCategoriesFragment : Fragment() {
         val adapter = CategorySummaryAdapter()
         binding.recyclerView.adapter = adapter
 
-        val gestureDetector = GestureDetectorCompat(requireContext(), object : GestureDetector.SimpleOnGestureListener() {
-            override fun onDoubleTap(e: MotionEvent): Boolean {
-                // Convert raw screen coordinates to RecyclerView's coordinate system
-                val location = IntArray(2)
-                binding.recyclerView.getLocationOnScreen(location)
-                val x = e.rawX - location[0]
-                val y = e.rawY - location[1]
-                val child = binding.recyclerView.findChildViewUnder(x, y)
-                val position = child?.let { binding.recyclerView.getChildAdapterPosition(it) } ?: RecyclerView.NO_POSITION
-                if (position != RecyclerView.NO_POSITION) {
-                    val viewPager = requireActivity().findViewById<ViewPager2>(R.id.viewPager)
-                    viewPager.currentItem = position
-                    return true
-                }
-                return super.onDoubleTap(e)
+        binding.recyclerView.setRowDoubleTapListener { id ->
+            val index = viewModel.categories.value?.indexOfFirst { it.id == id } ?: -1
+            val viewPager = requireActivity().findViewById<ViewPager2>(R.id.viewPager)
+            // category pages come first; the summary is the last page
+            if (index >= 0 && index < (viewPager.adapter?.itemCount ?: 0)) {
+                viewPager.currentItem = index
             }
-        })
-
-        binding.recyclerView.setOnTouchListener { _, event ->
-            gestureDetector.onTouchEvent(event)
-            false
         }
 
         viewModel.categories.observe(viewLifecycleOwner) { list ->
