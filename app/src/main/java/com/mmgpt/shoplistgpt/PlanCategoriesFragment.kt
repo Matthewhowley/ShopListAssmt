@@ -78,26 +78,13 @@ class PlanCategoriesFragment : Fragment() {
         binding.recyclerView.adapter = adapter
         dragHelper.attachToRecyclerView(binding.recyclerView)
 
-        val gestureDetector = GestureDetectorCompat(requireContext(), object : GestureDetector.SimpleOnGestureListener() {
-            override fun onDoubleTap(e: MotionEvent): Boolean {
-                val child = binding.recyclerView.findChildViewUnder(e.x, e.y)
-                val position = child?.let { binding.recyclerView.getChildAdapterPosition(it) } ?: RecyclerView.NO_POSITION
-                if (position != RecyclerView.NO_POSITION) {
-                    val item = adapter.currentList.getOrNull(position)
-                    if (item?.isHeading == true) {
-                        val index = position - 1
-                        val viewPager = requireActivity().findViewById<ViewPager2>(R.id.viewPager)
-                        viewPager.currentItem = index + 1
-                        return true
-                    }
-                }
-                return super.onDoubleTap(e)
+        binding.recyclerView.setRowDoubleTapListener { id ->
+            val index = viewModel.categories.value?.indexOfFirst { it.id == id } ?: -1
+            val viewPager = requireActivity().findViewById<ViewPager2>(R.id.viewPager)
+            val page = index + 1 // page 0 is the category list
+            if (index >= 0 && page < (viewPager.adapter?.itemCount ?: 0)) {
+                viewPager.currentItem = page
             }
-        })
-
-        binding.recyclerView.setOnTouchListener { _, event ->
-            gestureDetector.onTouchEvent(event)
-            false
         }
 
         binding.btnClearAll.visibility = View.VISIBLE

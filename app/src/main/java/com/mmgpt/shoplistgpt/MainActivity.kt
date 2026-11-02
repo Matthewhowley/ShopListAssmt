@@ -119,12 +119,12 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        var lastSize = viewModel.categories.value?.size ?: 0
+        var lastIds = viewModel.categories.value?.map { it.id } ?: emptyList()
         viewModel.categories.observe(this) { categories ->
-            val newSize = categories.size
-            if (newSize != lastSize) {
+            val newIds = categories.map { it.id }
+            if (newIds != lastIds) {
                 pagerAdapter.notifyDataSetChanged()
-                lastSize = newSize
+                lastIds = newIds
             }
         }
 
