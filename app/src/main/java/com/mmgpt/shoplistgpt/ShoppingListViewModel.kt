@@ -49,16 +49,11 @@ class ShoppingListViewModel(application: Application) : AndroidViewModel(applica
         updateItem(item)
     }
 
-    fun setAllChecked(categoryIndex: Int, checked: Boolean) {
-        val current = _categories.value?.toMutableList() ?: return
-        if (categoryIndex !in current.indices) return
-        val items = current[categoryIndex].items.map { item ->
-            if (item.isHeading) item else item.copy(isChecked = checked)
+    fun setAllChecked(categoryIndex: Int, checked: Boolean) =
+        editCategoryItems(categoryIndex) {
+            for (i in indices) if (!this[i].isHeading) this[i] = this[i].copy(isChecked = checked)
+            true
         }
-        current[categoryIndex] = current[categoryIndex].copy(items = items)
-        _categories.value = current
-        saveState()
-    }
 
     fun flagItem(item: ShoppingItem) {
         // Toggle the flagged state of the selected item. When called again on a
@@ -66,29 +61,15 @@ class ShoppingListViewModel(application: Application) : AndroidViewModel(applica
         updateItem(item.copy(isFlagged = !item.isFlagged))
     }
 
-    fun reorderItem(categoryIndex: Int, fromIndex: Int, toIndex: Int) {
-        val current = _categories.value?.toMutableList() ?: return
-        if (categoryIndex !in current.indices) return
-        val items = current[categoryIndex].items.toMutableList()
-        if (fromIndex !in items.indices || toIndex !in items.indices) return
-        val item = items.removeAt(fromIndex)
-        items.add(toIndex, item)
-        current[categoryIndex] = current[categoryIndex].copy(items = items)
-        _categories.value = current
-        saveState()
-    }
+    fun reorderItem(categoryIndex: Int, fromIndex: Int, toIndex: Int) =
+        editCategoryItems(categoryIndex) { move(fromIndex, toIndex) }
 
     fun addItem(categoryIndex: Int, position: Int, name: String) {
-        val current = _categories.value?.toMutableList() ?: return
-        if (categoryIndex !in current.indices) return
-        val items = current[categoryIndex].items.toMutableList()
-        val newId = current.flatMap { it.items }.maxOfOrNull { it.id }?.plus(1) ?: 0L
-        val newItem = ShoppingItem(id = newId, name = name)
-        val pos = position.coerceIn(0, items.size)
-        items.add(pos, newItem)
-        current[categoryIndex] = current[categoryIndex].copy(items = items)
-        _categories.value = current
-        saveState()
+        val newId = _categories.value?.flatMap { it.items }?.maxOfOrNull { it.id }?.plus(1) ?: 0L
+        editCategoryItems(categoryIndex) {
+            add(position.coerceIn(0, size), ShoppingItem(id = newId, name = name))
+            true
+        }
     }
 
     fun editItem(item: ShoppingItem, newName: String) {
@@ -100,6 +81,33 @@ class ShoppingListViewModel(application: Application) : AndroidViewModel(applica
             cat.copy(items = cat.items.filterNot { it.id == item.id })
         }
         saveState()
+    }
+
+    private fun <T> MutableList<T>.move(from: Int, to: Int): Boolean {
+        if (from !in indices || to !in indices) return false
+        add(to, removeAt(from))
+        return true
+    }
+
+    /** Edits a copy of the category list; commits and saves only if [block] returns true. */
+    private inline fun editCategories(block: MutableList<ShoppingCategory>.() -> Boolean) {
+        val current = _categories.value?.toMutableList() ?: return
+        if (current.block()) {
+            _categories.value = current
+            saveState()
+        }
+    }
+
+    /** Like [editCategories], but edits the items of one category (no-op on a bad index). */
+    private inline fun editCategoryItems(
+        categoryIndex: Int,
+        block: MutableList<ShoppingItem>.() -> Boolean,
+    ) = editCategories {
+        if (categoryIndex !in indices) return@editCategories false
+        val items = this[categoryIndex].items.toMutableList()
+        if (!items.block()) return@editCategories false
+        this[categoryIndex] = this[categoryIndex].copy(items = items)
+        true
     }
 
     private fun updateItem(updated: ShoppingItem) {
@@ -130,22 +138,11 @@ class ShoppingListViewModel(application: Application) : AndroidViewModel(applica
         saveState()
     }
 
-    fun deleteCategory(index: Int) {
-        val current = _categories.value?.toMutableList() ?: return
-        if (index !in current.indices) return
-        current.removeAt(index)
-        _categories.value = current
-        saveState()
-    }
+    fun deleteCategory(index: Int) =
+        editCategories { if (index in indices) { removeAt(index); true } else false }
 
-    fun reorderCategory(fromIndex: Int, toIndex: Int) {
-        val current = _categories.value?.toMutableList() ?: return
-        if (fromIndex !in current.indices || toIndex !in current.indices) return
-        val cat = current.removeAt(fromIndex)
-        current.add(toIndex, cat)
-        _categories.value = current
-        saveState()
-    }
+    fun reorderCategory(fromIndex: Int, toIndex: Int) =
+        editCategories { move(fromIndex, toIndex) }
 
     fun clearAllCategories() {
         _categories.value = emptyList()
